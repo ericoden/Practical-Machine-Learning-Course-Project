@@ -1,0 +1,141 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Eric Oden"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+# Downloading and Cleaning Data
+
+```{r}
+library(caret)
+library(rattle)
+set.seed(1234)
+```
+
+Download the training and testing data:
+
+```{r}
+site <- "https://d396qusza40orc.cloudfront.net/predmachlearn/"
+download.file(url = paste0(site, "pml-training.csv"), 
+              destfile = "./data/train.csv")
+download.file(url = paste0(site, "pml-testing.csv"), 
+              destfile = "./data/test.csv")
+```
+
+Read both data sets:
+
+```{r}
+train <- read.csv("./data/train.csv")
+test <- read.csv("./data/test.csv")
+dim(train)
+dim(test)
+```
+Cleaning data. First 7 variables are irrelevant, some variables are almost 
+entirely NA, and some variables have near zero variance. This can be removed.
+
+```{r}
+train <- train[, -c(1:7)]
+train <- train[,colMeans(is.na(train)) < .95] 
+nzv <- nearZeroVar(train)
+train <- train[, -nzv]
+```
+
+This reduces the number of variables from 160 to 53. We now split `train` into a 
+validation and training set. 
+
+```{r}
+inTrain <- createDataPartition(y = train$classe, p = 0.7, list = FALSE)
+valid <- train[-inTrain,]
+train <- train[inTrain,]
+```
+
+# Training Models
+
+We shall use 5-fold cross validation for training.
+
+```{r}
+control <- trainControl(method = "cv", number = 5, verboseIter = F)
+```
+
+We shall train the following types of models:
+
+* Decision Trees (rpart)
+* Random Forests (rf)
+* Gradient Boosting on Trees (gbm)
+* Linear Discriminant Analysis (lda)
+
+Decision Tree Training:
+
+```{r rpart, cache = TRUE}
+mod_rpart <- train(classe ~ ., data = train, method = "rpart", trControl = control)
+```
+
+```{r}
+plot(mod_rpart)
+```
+
+Random Forest Training:
+
+```{r rf, cache = TRUE}
+mod_rf <- train(classe ~ ., data = train, method = "rf", trControl = control)
+```
+
+```{r}
+plot(mod_rf)
+```
+
+Gradient Boosting on Trees Training:
+
+```{r gbm, cache = TRUE}
+mod_gbm <- train(classe ~ ., data = train, method = "gbm", trControl = control,
+                 verbose = F)
+```
+
+```{r}
+plot(mod_gbm)
+```
+
+Linear Discriminant Analysis Training:
+
+```{r lda, cache = TRUE}
+mod_lda <- train(classe ~ ., data = train, method = "lda", trControl = control)
+```
+
+Comparing the accuracy of each of the methods on the validation set:
+
+```{r}
+pred_part <- predict(mod_rpart, valid)
+pred_rf <- predict(mod_rf, valid)
+pred_gbm <- predict(mod_gbm, valid)
+pred_lda <- predict(mod_lda, valid)
+
+
+cm_part <- confusionMatrix(pred_part, factor(valid$classe))
+cm_rf <- confusionMatrix(pred_rf, factor(valid$classe))
+cm_gbm <- confusionMatrix(pred_gbm, factor(valid$classe))
+cm_lda <- confusionMatrix(pred_lda, factor(valid$classe))
+
+cm_part$overall['Accuracy']
+cm_rf$overall['Accuracy']
+cm_gbm$overall['Accuracy']
+cm_lda$overall['Accuracy']
+
+```
+
+Since the accuracy of the Random Forest model is the greatest, we shall use that
+model.
+
+The results on the test set:
+```{r}
+pred_test_rf <- predict(mod_rf, test)
+pred_test_rf
+```
+
+
+
+
